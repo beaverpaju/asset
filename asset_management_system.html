@@ -2,13 +2,12 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>브라보비버파주 자산관리 시스템</title>
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
     <style>
-        /* ... (스타일 생략: 기존 코드와 동일, 질문 내용을 그대로 사용) ... */
         * { margin: 0; padding: 0; box-sizing: border-box;}
         body { font-family: 'Arial', sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px;}
         .container { max-width: 1200px; margin: 0 auto; background: white; border-radius: 15px; box-shadow: 0 20px 40px rgba(0,0,0,0.1); padding: 30px;}
@@ -51,6 +50,25 @@
             .tabs { flex-direction: column;}
             .tab-button { margin-bottom: 5px;}
             .asset-grid { grid-template-columns: 1fr;}
+        }
+        /* 수정 모달 */
+        #edit-modal {
+            display: none;
+            position: fixed;
+            z-index: 9999;
+            left: 0; top: 0;
+            width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.3);
+            justify-content: center;
+            align-items: center;
+        }
+        #edit-modal > div {
+            background: white;
+            padding: 30px;
+            border-radius: 14px;
+            min-width: 350px;
+            max-width: 95vw;
+            position: relative;
         }
     </style>
 </head>
@@ -173,18 +191,73 @@
         </div>
     </div>
 
+    <!-- 자산 정보 수정 모달 -->
+    <div id="edit-modal">
+        <div>
+            <form id="edit-form">
+                <h2>자산 정보 수정</h2>
+                <input type="hidden" id="edit-id" />
+                <div class="form-group">
+                    <label>자산명 *</label>
+                    <input type="text" id="edit-assetName" required />
+                </div>
+                <div class="form-group">
+                    <label>모델명</label>
+                    <input type="text" id="edit-modelName" />
+                </div>
+                <div class="form-group">
+                    <label>시리얼넘버</label>
+                    <input type="text" id="edit-serialNumber" />
+                </div>
+                <div class="form-group">
+                    <label>카테고리 *</label>
+                    <select id="edit-assetCategory" required>
+                        <option value="">카테고리 선택</option>
+                        <option value="전자기기">전자기기</option>
+                        <option value="사무용품">사무용품</option>
+                        <option value="가구">가구</option>
+                        <option value="기계장비">기계장비</option>
+                        <option value="차량">차량</option>
+                        <option value="기타">기타</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>위치 *</label>
+                    <select id="edit-assetLocation" required>
+                        <option value="">위치 선택</option>
+                        <option value="사무실">사무실</option>
+                        <option value="작업장">작업장</option>
+                        <option value="그라운드">그라운드</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>가치 (원)</label>
+                    <input type="number" id="edit-assetValue" />
+                </div>
+                <div class="form-group">
+                    <label>구입일자</label>
+                    <input type="date" id="edit-purchaseDate" />
+                </div>
+                <div class="form-group">
+                    <label>설명</label>
+                    <textarea id="edit-assetDescription" rows="3"></textarea>
+                </div>
+                <button type="submit" class="btn btn-success">저장</button>
+                <button type="button" class="btn btn-secondary" onclick="closeEditModal()">취소</button>
+            </form>
+        </div>
+    </div>
+
     <script>
         let assets = JSON.parse(localStorage.getItem('assets')) || [];
         let videoStream = null;
 
-        // 탭 전환 (event -> buttonElem)
+        // 탭 전환
         function showTab(tabName, buttonElem) {
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
             document.querySelectorAll('.tab-button').forEach(button => button.classList.remove('active'));
-
             document.getElementById(tabName + '-tab').classList.add('active');
             buttonElem.classList.add('active');
-
             if (tabName === 'list') displayAssets();
             if (tabName === 'stats') updateStats();
         }
@@ -192,7 +265,6 @@
         // 자산 등록
         document.getElementById('asset-form').addEventListener('submit', function(e) {
             e.preventDefault();
-
             const formData = new FormData(e.target);
             const asset = {
                 id: Date.now().toString(),
@@ -206,10 +278,8 @@
                 description: formData.get('assetDescription'),
                 registrationDate: new Date().toISOString().split('T')[0]
             };
-
             assets.push(asset);
             localStorage.setItem('assets', JSON.stringify(assets));
-
             alert('자산이 성공적으로 등록되었습니다!');
             e.target.reset();
         });
@@ -218,12 +288,10 @@
         function displayAssets(filteredAssets = null) {
             const assetList = document.getElementById('asset-list');
             const assetsToShow = filteredAssets || assets;
-
             if (assetsToShow.length === 0) {
                 assetList.innerHTML = '<div style="text-align: center; padding: 50px; color: #666;">등록된 자산이 없습니다.</div>';
                 return;
             }
-
             assetList.innerHTML = assetsToShow.map(asset => `
                 <div class="asset-card">
                     <h3>${asset.name}</h3>
@@ -240,9 +308,9 @@
                     <div class="qr-code" id="qr-${asset.id}"></div>
                     <button class="btn btn-danger" onclick="deleteAsset('${asset.id}')">삭제</button>
                     <button class="btn btn-secondary" onclick="downloadQR('${asset.id}')">QR 다운로드</button>
+                    <button class="btn btn-secondary" onclick="editAsset('${asset.id}')">수정</button>
                 </div>
             `).join('');
-
             // QR 코드 생성
             assetsToShow.forEach(asset => {
                 const qrData = JSON.stringify({
@@ -253,14 +321,10 @@
                     category: asset.category,
                     location: asset.location
                 });
-
                 QRCode.toCanvas(document.getElementById(`qr-${asset.id}`), qrData, {
                     width: 150,
                     margin: 1,
-                    color: {
-                        dark: '#000000',
-                        light: '#FFFFFF'
-                    }
+                    color: { dark: '#000000', light: '#FFFFFF' }
                 }, function (error) {
                     if (error) console.error(error);
                 });
@@ -405,7 +469,6 @@
             const video = document.getElementById('video');
             const canvas = document.getElementById('canvas');
             const context = canvas.getContext('2d');
-
             if (video.readyState === video.HAVE_ENOUGH_DATA) {
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
@@ -439,7 +502,52 @@
                     }
                 }
             }
-            if (videoStream) { requestAnimationFrame(scanQRCode); }
+            if (videoStream) requestAnimationFrame(scanQRCode);
+        }
+
+        // 자산 정보 수정 함수
+        function editAsset(id) {
+            const asset = assets.find(a => a.id === id);
+            if (!asset) return;
+            document.getElementById('edit-id').value = asset.id;
+            document.getElementById('edit-assetName').value = asset.name;
+            document.getElementById('edit-modelName').value = asset.modelName || '';
+            document.getElementById('edit-serialNumber').value = asset.serialNumber || '';
+            document.getElementById('edit-assetCategory').value = asset.category;
+            document.getElementById('edit-assetLocation').value = asset.location;
+            document.getElementById('edit-assetValue').value = asset.value || '';
+            document.getElementById('edit-purchaseDate').value = asset.purchaseDate || '';
+            document.getElementById('edit-assetDescription').value = asset.description || '';
+            document.getElementById('edit-modal').style.display = 'flex';
+        }
+
+        // 수정 폼 저장 처리
+        document.getElementById('edit-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const id = document.getElementById('edit-id').value;
+            const idx = assets.findIndex(a => a.id === id);
+            if (idx === -1) return;
+            assets[idx] = {
+                ...assets[idx],
+                name: document.getElementById('edit-assetName').value,
+                modelName: document.getElementById('edit-modelName').value,
+                serialNumber: document.getElementById('edit-serialNumber').value,
+                category: document.getElementById('edit-assetCategory').value,
+                location: document.getElementById('edit-assetLocation').value,
+                value: parseInt(document.getElementById('edit-assetValue').value) || 0,
+                purchaseDate: document.getElementById('edit-purchaseDate').value,
+                description: document.getElementById('edit-assetDescription').value
+            };
+            localStorage.setItem('assets', JSON.stringify(assets));
+            closeEditModal();
+            displayAssets();
+            updateStats();
+            alert('자산 정보가 수정되었습니다!');
+        });
+
+        // 수정 모달 닫기
+        function closeEditModal() {
+            document.getElementById('edit-modal').style.display = 'none';
         }
 
         displayAssets();
