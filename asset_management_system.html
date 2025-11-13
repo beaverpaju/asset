@@ -201,6 +201,10 @@
                 <h2>자산 정보 수정</h2>
                 <input type="hidden" id="edit-id" />
                 <div class="form-group">
+                    <label>관리번호</label>
+                    <input type="text" id="edit-managementNumber" readonly/>
+                </div>
+                <div class="form-group">
                     <label>자산명 *</label>
                     <input type="text" id="edit-assetName" required />
                 </div>
@@ -251,6 +255,40 @@
         </div>
     </div>
 
+    <script>
+const categoryToAlpha = {
+  "사무기기": "S",
+  "전자제품": "A",
+  "가구": "F",
+  "기계장비": "M",
+  "기타": "O"
+};
+
+function generateManagementNumber(purchaseDate, category) {
+  if (!purchaseDate) {
+    alert("구입일자를 반드시 입력해야 관리번호를 생성할 수 있습니다.");
+    return null;
+  }
+  const prefix = "파주";
+  const date = new Date(purchaseDate);
+  const year = date.getFullYear().toString().slice(2);
+  const month = (date.getMonth() + 1).toString().padStart(2, "0");
+  const ym = year + month;
+  const alpha = categoryToAlpha[category] || "O";
+
+  // 기존 데이터에서 같은 연월/카테고리 자산 개수 계산
+  const count = assets.filter((a) => {
+    if (!a.purchaseDate || !a.category) return false;
+    const d = new Date(a.purchaseDate);
+    const aYM = d.getFullYear().toString().slice(2) + (d.getMonth() + 1).toString().padStart(2, "0");
+    const aAlpha = categoryToAlpha[a.category] || "O";
+    return aYM === ym && aAlpha === alpha;
+  }).length;
+
+  const serialNum = (count + 1).toString().padStart(3, "0");
+  return `${prefix}-${ym}-${alpha}-${serialNum}`;
+}
+        
 <script>
   // firebase 정보
   const firebaseConfig = {
@@ -284,6 +322,10 @@
     // 신규 자산 등록 폼 이벤트
     document.getElementById('asset-form').addEventListener('submit', e => {
         e.preventDefault();
+        const purchaseDate = e.target.purchaseDate.value;
+        const category = e.target.assetCategory.value;
+        const managementNumber = generateManagementNumber(purchaseDate, category);
+  if (!managementNumber) return;     
         const assetData = {
             name: e.target.assetName.value.trim(),
             modelName: e.target.modelName.value.trim(),
@@ -342,6 +384,7 @@
             <div class="asset-card">
                 <h3>${asset.name}</h3>
                 <div class="asset-info">
+                    <span><strong>관리번호:</strong> ${asset.managementNumber}</span>
                     <span><strong>모델명:</strong> ${asset.modelName || '미입력'}</span>
                     <span><strong>시리얼넘버:</strong> ${asset.serialNumber || '미입력'}</span>
                     <span><strong>카테고리:</strong> ${asset.category}</span>
@@ -360,6 +403,7 @@
         filtered.forEach(asset => {
             const qrData = JSON.stringify({
                 id: asset.id,
+                managementNumber: asset.managementNumber,
                 name: asset.name,
                 modelName: asset.modelName,
                 serialNumber: asset.serialNumber,
@@ -401,6 +445,7 @@
         const asset = assets.find(a => a.id === id);
         if(!asset) return;
         document.getElementById('edit-id').value = asset.id;
+        document.getElementById("edit-managementNumber").value = asset.managementNumber;
         document.getElementById('edit-assetName').value = asset.name;
         document.getElementById('edit-modelName').value = asset.modelName || '';
         document.getElementById('edit-serialNumber').value = asset.serialNumber || '';
@@ -416,6 +461,7 @@
     document.getElementById('edit-form').addEventListener('submit', e => {
         e.preventDefault();
         const id = document.getElementById('edit-id').value;
+        // 관리번호는 수정 불
         const updatedData = {
             name: document.getElementById('edit-assetName').value.trim(),
             modelName: document.getElementById('edit-modelName').value.trim(),
@@ -442,10 +488,11 @@
             alert('내보낼 자산이 없습니다.');
             return;
         }
-        const headers = ['자산명','모델명','시리얼넘버','카테고리','위치','가치','구입일','등록일','설명','QR코드(Base64)'];
+        const headers = ['관리번호','자산명','모델명','시리얼넘버','카테고리','위치','가치','구입일','등록일','설명','QR코드(Base64)'];
         async function getQRCodeDataURL(asset) {
             const qrData = JSON.stringify({
                 id: asset.id,
+                managementNumber: asset.managementNumber,
                 name: asset.name,
                 modelName: asset.modelName,
                 serialNumber: asset.serialNumber,
@@ -464,6 +511,7 @@
         for(const asset of assets) {
             const qrCodeDataURL = await getQRCodeDataURL(asset);
             const row = [
+                `"${asset.managementNumber}"`,
                 `"${asset.name.replace(/"/g,'""')}"`,
                 `"${(asset.modelName||'').replace(/"/g,'""')}"`,
                 `"${(asset.serialNumber||'').replace(/"/g,'""')}"`,
