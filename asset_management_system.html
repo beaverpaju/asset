@@ -9,8 +9,7 @@
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
     <style>
-        /* 스타일 생략 - 이전에 제공한 CSS 전체 복사 사용 가능 */
-        /* ... */
+        /* 기존 CSS 그대로 유지 */
         * { margin: 0; padding: 0; box-sizing: border-box;}
         body { font-family: 'Arial', sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px;}
         .container { max-width: 1200px; margin: 0 auto; background: white; border-radius: 15px; box-shadow: 0 20px 40px rgba(0,0,0,0.1); padding: 30px;}
@@ -54,7 +53,6 @@
             .tab-button { margin-bottom: 5px;}
             .asset-grid { grid-template-columns: 1fr;}
         }
-        /* 수정 모달 */
         #edit-modal {
             display: none;
             position: fixed;
@@ -83,10 +81,10 @@
         </div>
 
         <div class="tabs">
-            <button class="tab-button active" onclick="showTab('add', this)">자산 등록</button>
-            <button class="tab-button" onclick="showTab('list', this)">자산 목록</button>
-            <button class="tab-button" onclick="showTab('scan', this)">QR 스캔</button>
-            <button class="tab-button" onclick="showTab('stats', this)">통계</button>
+            <button class="tab-button active" data-tab="add">자산 등록</button>
+            <button class="tab-button" data-tab="list">자산 목록</button>
+            <button class="tab-button" data-tab="scan">QR 스캔</button>
+            <button class="tab-button" data-tab="stats">통계</button>
         </div>
 
         <!-- 자산 등록 탭 -->
@@ -255,12 +253,13 @@
         </div>
     </div>
 
-    <script>
+<script>
 const categoryToAlpha = {
   "사무기기": "S",
-  "전자제품": "A",
+  "가전제품": "A",
   "가구": "F",
   "기계장비": "M",
+  "차량": "V",
   "기타": "O"
 };
 
@@ -276,7 +275,6 @@ function generateManagementNumber(purchaseDate, category) {
   const ym = year + month;
   const alpha = categoryToAlpha[category] || "O";
 
-  // 기존 데이터에서 같은 연월/카테고리 자산 개수 계산
   const count = assets.filter((a) => {
     if (!a.purchaseDate || !a.category) return false;
     const d = new Date(a.purchaseDate);
@@ -288,10 +286,9 @@ function generateManagementNumber(purchaseDate, category) {
   const serialNum = (count + 1).toString().padStart(3, "0");
   return `${prefix}-${ym}-${alpha}-${serialNum}`;
 }
-        
-<script>
-  // firebase 정보
-  const firebaseConfig = {
+
+// Firebase 설정 및 초기화
+const firebaseConfig = {
     apiKey: "AIzaSyAust7Qcf2EgA2c8vczSiASXiPT5xaRuLg",
     authDomain: "bravo-beaver-asset.firebaseapp.com",
     databaseURL: "https://bravo-beaver-asset-default-rtdb.asia-southeast1.firebasedatabase.app",
@@ -299,341 +296,339 @@ function generateManagementNumber(purchaseDate, category) {
     storageBucket: "bravo-beaver-asset.firebasestorage.app",
     messagingSenderId: "698947651541",
     appId: "1:698947651541:web:876688653b0f8080425f5c"
-  };
+};
 
-    // Firebase 초기화
-    firebase.initializeApp(firebaseConfig);
-    const database = firebase.database();
-    const assetsRef = database.ref('assets');
+firebase.initializeApp(firebaseConfig);
+const database = firebase.database();
+const assetsRef = database.ref('assets');
+let assets = [];
 
-    // 자산 데이터 배열
-    let assets = [];
+// 탭 전환 함수
+function showTab(tabName, btn) {
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+    const tab = document.getElementById(`${tabName}-tab`);
+    if(!tab) return;
+    tab.classList.add('active');
+    btn.classList.add('active');
+    if(tabName === 'list') displayAssets();
+    if(tabName === 'stats') updateStats();
+}
 
-    // 탭 전환 기능
-    function showTab(tabName, btn) {
-        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-        document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
-        document.getElementById(`${tabName}-tab`).classList.add('active');
-        btn.classList.add('active');
-        if(tabName === 'list') displayAssets();
-        if(tabName === 'stats') updateStats();
-    }
-
-    // 신규 자산 등록 폼 이벤트
-    document.getElementById('asset-form').addEventListener('submit', e => {
-        e.preventDefault();
-        const purchaseDate = e.target.purchaseDate.value;
-        const category = e.target.assetCategory.value;
-        const managementNumber = generateManagementNumber(purchaseDate, category);
-  if (!managementNumber) return;     
-        const assetData = {
-            name: e.target.assetName.value.trim(),
-            modelName: e.target.modelName.value.trim(),
-            serialNumber: e.target.serialNumber.value.trim(),
-            category: e.target.assetCategory.value,
-            location: e.target.assetLocation.value,
-            value: parseInt(e.target.assetValue.value) || 0,
-            purchaseDate: e.target.purchaseDate.value,
-            description: e.target.assetDescription.value.trim(),
-            registrationDate: new Date().toISOString()
-        };
-        assetsRef.push(assetData, err => {
-            if(err) {
-                alert('등록 실패: ' + err.message);
-            } else {
-                alert('자산 등록 완료');
-                e.target.reset();
-                showTab('list', document.querySelector('.tab-button:nth-child(2)'));
-            }
+// 페이지 준비 후 이벤트 연결 및 초기 탭 설정
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.tab-button').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const tabName = this.getAttribute('data-tab');
+            showTab(tabName, this);
         });
     });
+    showTab('add', document.querySelector('.tab-button[data-tab="add"]'));
+});
 
-    // Firebase 데이터 변경 실시간 감지
-    assetsRef.on('value', snapshot => {
-        const data = snapshot.val() || {};
-        assets = Object.entries(data).map(([id, value]) => ({ id, ...value }));
-        if(document.querySelector('.tab-button.active').textContent === '자산 목록') {
-            displayAssets();
+// 신규 자산 등록 폼 이벤트
+document.getElementById('asset-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const purchaseDate = e.target.purchaseDate.value;
+    const category = e.target.assetCategory.value;
+    const managementNumber = generateManagementNumber(purchaseDate, category);
+    if (!managementNumber) return;
+    const assetData = {
+        managementNumber: managementNumber,
+        name: e.target.assetName.value.trim(),
+        modelName: e.target.modelName.value.trim(),
+        serialNumber: e.target.serialNumber.value.trim(),
+        category: category,
+        location: e.target.assetLocation.value,
+        value: parseInt(e.target.assetValue.value) || 0,
+        purchaseDate: purchaseDate,
+        description: e.target.assetDescription.value.trim(),
+        registrationDate: new Date().toISOString()
+    };
+    assetsRef.push(assetData, err => {
+        if(err) {
+            alert('등록 실패: ' + err.message);
+        } else {
+            alert('자산 등록 완료');
+            e.target.reset();
+            showTab('list', document.querySelector('.tab-button[data-tab="list"]'));
         }
-        updateStats();
     });
+});
 
-    const assetListEl = document.getElementById('asset-list');
-    const searchInput = document.getElementById('searchInput');
-
-    searchInput.addEventListener('input', () => {
+// Firebase 리얼타임 데이터 반영
+assetsRef.on('value', snapshot => {
+    const data = snapshot.val() || {};
+    assets = Object.entries(data).map(([id, value]) => ({ id, ...value }));
+    if(document.querySelector('.tab-button.active').getAttribute('data-tab') === 'list') {
         displayAssets();
-    });
+    }
+    updateStats();
+});
 
-    // 자산 목록 보여주기
-    function displayAssets() {
-        let filter = searchInput.value.toLowerCase();
-        const filtered = assets.filter(a =>
-            a.name.toLowerCase().includes(filter) ||
-            a.category.toLowerCase().includes(filter) ||
-            a.location.toLowerCase().includes(filter) ||
-            (a.description && a.description.toLowerCase().includes(filter)) ||
-            (a.modelName && a.modelName.toLowerCase().includes(filter)) ||
-            (a.serialNumber && a.serialNumber.toLowerCase().includes(filter))
-        );
-        if(filtered.length === 0) {
-            assetListEl.innerHTML = '<div style="text-align:center; color:#666; padding:50px;">등록된 자산이 없습니다.</div>';
-            return;
-        }
-        assetListEl.innerHTML = filtered.map(asset => `
-            <div class="asset-card">
-                <h3>${asset.name}</h3>
-                <div class="asset-info">
-                    <span><strong>관리번호:</strong> ${asset.managementNumber}</span>
-                    <span><strong>모델명:</strong> ${asset.modelName || '미입력'}</span>
-                    <span><strong>시리얼넘버:</strong> ${asset.serialNumber || '미입력'}</span>
-                    <span><strong>카테고리:</strong> ${asset.category}</span>
-                    <span><strong>위치:</strong> ${asset.location}</span>
-                    <span><strong>가치:</strong> ${asset.value ? asset.value.toLocaleString() + '원' : '미입력'}</span>
-                    <span><strong>구입일:</strong> ${asset.purchaseDate || '미입력'}</span>
-                    <span><strong>등록일:</strong> ${new Date(asset.registrationDate).toLocaleString()}</span>
-                    ${asset.description ? `<span><strong>설명:</strong> ${asset.description}</span>` : ''}
-                </div>
-                <div class="qr-code" id="qr-${asset.id}"></div>
-                <button class="btn btn-danger" onclick="deleteAsset('${asset.id}')">삭제</button>
-                <button class="btn btn-secondary" onclick="downloadQR('${asset.id}')">QR 다운로드</button>
-                <button class="btn btn-secondary" onclick="editAsset('${asset.id}')">수정</button>
+// 자산 목록 표시 및 검색 기능
+const assetListEl = document.getElementById('asset-list');
+const searchInput = document.getElementById('searchInput');
+searchInput.addEventListener('input', () => displayAssets());
+
+function displayAssets() {
+    let filter = searchInput.value.toLowerCase();
+    const filtered = assets.filter(a =>
+        a.name.toLowerCase().includes(filter) ||
+        a.category.toLowerCase().includes(filter) ||
+        a.location.toLowerCase().includes(filter) ||
+        (a.description && a.description.toLowerCase().includes(filter)) ||
+        (a.modelName && a.modelName.toLowerCase().includes(filter)) ||
+        (a.serialNumber && a.serialNumber.toLowerCase().includes(filter))
+    );
+    if(filtered.length === 0) {
+        assetListEl.innerHTML = '<div style="text-align:center; color:#666; padding:50px;">등록된 자산이 없습니다.</div>';
+        return;
+    }
+    assetListEl.innerHTML = filtered.map(asset => `
+        <div class="asset-card">
+            <h3>${asset.name}</h3>
+            <div class="asset-info">
+                <span><strong>관리번호:</strong> ${asset.managementNumber}</span>
+                <span><strong>모델명:</strong> ${asset.modelName || '미입력'}</span>
+                <span><strong>시리얼넘버:</strong> ${asset.serialNumber || '미입력'}</span>
+                <span><strong>카테고리:</strong> ${asset.category}</span>
+                <span><strong>위치:</strong> ${asset.location}</span>
+                <span><strong>가치:</strong> ${asset.value ? asset.value.toLocaleString() + '원' : '미입력'}</span>
+                <span><strong>구입일:</strong> ${asset.purchaseDate || '미입력'}</span>
+                <span><strong>등록일:</strong> ${new Date(asset.registrationDate).toLocaleString()}</span>
+                ${asset.description ? `<span><strong>설명:</strong> ${asset.description}</span>` : ''}
             </div>
-        `).join('');
-        filtered.forEach(asset => {
-            const qrData = JSON.stringify({
-                id: asset.id,
-                managementNumber: asset.managementNumber,
-                name: asset.name,
-                modelName: asset.modelName,
-                serialNumber: asset.serialNumber,
-                category: asset.category,
-                location: asset.location
-            });
-            QRCode.toCanvas(document.getElementById(`qr-${asset.id}`), qrData, {
-                width: 150,
-                margin: 1,
-                color: { dark: '#000000', light: '#FFFFFF' }
-            }, error => {
-                if(error) console.error(error);
+            <div class="qr-code" id="qr-${asset.id}"></div>
+            <button class="btn btn-danger" onclick="deleteAsset('${asset.id}')">삭제</button>
+            <button class="btn btn-secondary" onclick="downloadQR('${asset.id}')">QR 다운로드</button>
+            <button class="btn btn-secondary" onclick="editAsset('${asset.id}')">수정</button>
+        </div>
+    `).join('');
+    filtered.forEach(asset => {
+        const qrData = JSON.stringify({
+            id: asset.id,
+            managementNumber: asset.managementNumber,
+            name: asset.name,
+            modelName: asset.modelName,
+            serialNumber: asset.serialNumber,
+            category: asset.category,
+            location: asset.location
+        });
+        QRCode.toCanvas(document.getElementById(`qr-${asset.id}`), qrData, {
+            width: 150,
+            margin: 1,
+            color: { dark: '#000000', light: '#FFFFFF' }
+        }, error => {
+            if(error) console.error(error);
+        });
+    });
+}
+
+// 자산 삭제 함수
+function deleteAsset(id) {
+    if(confirm('정말 삭제하시겠습니까?')) {
+        assetsRef.child(id).remove().then(() => {
+            alert('삭제 완료');
+        }).catch(error => alert('삭제 실패: ' + error.message));
+    }
+}
+
+// QR 다운로드 함수
+function downloadQR(id) {
+    const canvas = document.querySelector(`#qr-${id} canvas`);
+    if(canvas) {
+        const link = document.createElement('a');
+        link.download = `qr-${id}.png`;
+        link.href = canvas.toDataURL();
+        link.click();
+    }
+}
+
+// 자산 수정 모달 열기
+function editAsset(id) {
+    const asset = assets.find(a => a.id === id);
+    if(!asset) return;
+    document.getElementById('edit-id').value = asset.id;
+    document.getElementById('edit-managementNumber').value = asset.managementNumber;
+    document.getElementById('edit-assetName').value = asset.name;
+    document.getElementById('edit-modelName').value = asset.modelName || '';
+    document.getElementById('edit-serialNumber').value = asset.serialNumber || '';
+    document.getElementById('edit-assetCategory').value = asset.category;
+    document.getElementById('edit-assetLocation').value = asset.location;
+    document.getElementById('edit-assetValue').value = asset.value || '';
+    document.getElementById('edit-purchaseDate').value = asset.purchaseDate || '';
+    document.getElementById('edit-assetDescription').value = asset.description || '';
+    document.getElementById('edit-modal').style.display = 'flex';
+}
+
+// 수정 폼 제출 이벤트
+document.getElementById('edit-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const id = document.getElementById('edit-id').value;
+    const updatedData = {
+        name: document.getElementById('edit-assetName').value.trim(),
+        modelName: document.getElementById('edit-modelName').value.trim(),
+        serialNumber: document.getElementById('edit-serialNumber').value.trim(),
+        category: document.getElementById('edit-assetCategory').value,
+        location: document.getElementById('edit-assetLocation').value,
+        value: parseInt(document.getElementById('edit-assetValue').value) || 0,
+        purchaseDate: document.getElementById('edit-purchaseDate').value,
+        description: document.getElementById('edit-assetDescription').value.trim()
+    };
+    assetsRef.child(id).update(updatedData).then(() => {
+        alert('수정 완료');
+        closeEditModal();
+    }).catch(e => alert('수정 실패: ' + e.message));
+});
+
+// 수정 모달 닫기
+function closeEditModal() {
+    document.getElementById('edit-modal').style.display = 'none';
+}
+
+// CSV 내보내기
+async function exportToCSV() {
+    if(assets.length === 0) {
+        alert('내보낼 자산이 없습니다.');
+        return;
+    }
+    const headers = ['관리번호','자산명','모델명','시리얼넘버','카테고리','위치','가치','구입일','등록일','설명','QR코드(Base64)'];
+    async function getQRCodeDataURL(asset) {
+        const qrData = JSON.stringify({
+            id: asset.id,
+            managementNumber: asset.managementNumber,
+            name: asset.name,
+            modelName: asset.modelName,
+            serialNumber: asset.serialNumber,
+            category: asset.category,
+            location: asset.location
+        });
+        return new Promise(resolve => {
+            const canvas = document.createElement('canvas');
+            QRCode.toCanvas(canvas, qrData, { width: 150, margin: 1 }, error => {
+                if(error) resolve('');
+                else resolve(canvas.toDataURL());
             });
         });
     }
+    const csvRows = [];
+    for(const asset of assets) {
+        const qrCodeDataURL = await getQRCodeDataURL(asset);
+        const row = [
+            `"${asset.managementNumber}"`,
+            `"${asset.name.replace(/"/g,'""')}"`,
+            `"${(asset.modelName||'').replace(/"/g,'""')}"`,
+            `"${(asset.serialNumber||'').replace(/"/g,'""')}"`,
+            `"${asset.category}"`,
+            `"${asset.location}"`,
+            asset.value || 0,
+            asset.purchaseDate || '',
+            asset.registrationDate || '',
+            `"${(asset.description||'').replace(/"/g,'""')}"`,
+            `"${qrCodeDataURL}"`
+        ].join(',');
+        csvRows.push(row);
+    }
+    const BOM = '\uFEFF';
+    const csvContent = BOM + [headers.join(','), ...csvRows].join('\n');
+    const blob = new Blob([csvContent], {type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `브라보비버파주_자산목록_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
 
-    // 자산 삭제
-    function deleteAsset(id) {
-        if(confirm('정말 삭제하시겠습니까?')) {
-            assetsRef.child(id).remove().then(() => {
-                alert('삭제 완료');
-            }).catch(error => alert('삭제 실패: ' + error.message));
+// 목록 인쇄
+function printAssets() {
+    window.print();
+}
+
+// 통계 업데이트 함수
+function updateStats() {
+    document.getElementById('total-assets').textContent = assets.length;
+    const totalValue = assets.reduce((sum,a) => sum + (a.value||0), 0);
+    document.getElementById('total-value').textContent = totalValue.toLocaleString() + '원';
+    const categories = [...new Set(assets.map(a => a.category))];
+    const locations = ['사무실', '작업장', '그라운드'];
+    document.getElementById('categories-count').textContent = categories.length;
+    document.getElementById('locations-count').textContent = locations.length;
+
+    const categoryStatsEl = document.getElementById('category-stats');
+    categoryStatsEl.innerHTML = `
+        <h3>카테고리별 분포</h3>
+        <div class="asset-grid">
+            ${categories.map(cat => `
+                <div class="asset-card">
+                    <h4>${cat}</h4>
+                    <p>${assets.filter(a => a.category === cat).length}개</p>
+                </div>
+            `).join('')}
+        </div>
+    `;
+
+    const locationStatsEl = document.getElementById('location-stats');
+    locationStatsEl.innerHTML = `
+        <h3>위치별 분포</h3>
+        <div class="asset-grid">
+            ${locations.map(loc => `
+                <div class="asset-card">
+                    <h4>${loc}</h4>
+                    <p>${assets.filter(a => a.location === loc).length}개</p>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+// 카메라 및 QR 스캔 관련 코드 유지
+let videoStream = null;
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const context = canvas.getContext('2d');
+const scanResult = document.getElementById('scan-result');
+
+async function startCamera() {
+    try {
+        videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        video.srcObject = videoStream;
+        video.setAttribute('playsinline', true);
+        video.play();
+        requestAnimationFrame(scanQRCode);
+    } catch(err) {
+        alert('카메라 접근 실패: ' + err.message);
+    }
+}
+
+function stopCamera() {
+    if(videoStream) {
+        videoStream.getTracks().forEach(track => track.stop());
+        videoStream = null;
+        scanResult.textContent = '';
+    }
+}
+
+function scanQRCode() {
+    if(video.readyState === video.HAVE_ENOUGH_DATA) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageData = context.getImageData(0,0,canvas.width,canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+            inversionAttempts: "dontInvert",
+        });
+        if(code) {
+            scanResult.textContent = '스캔 결과: ' + code.data;
+        } else {
+            scanResult.textContent = 'QR 코드를 감지하지 못했습니다.';
         }
     }
-
-    // QR 다운로드
-    function downloadQR(id) {
-        const canvas = document.querySelector(`#qr-${id} canvas`);
-        if(canvas) {
-            const link = document.createElement('a');
-            link.download = `qr-${id}.png`;
-            link.href = canvas.toDataURL();
-            link.click();
-        }
-    }
-
-    // 자산 수정 모달 열기
-    function editAsset(id) {
-        const asset = assets.find(a => a.id === id);
-        if(!asset) return;
-        document.getElementById('edit-id').value = asset.id;
-        document.getElementById("edit-managementNumber").value = asset.managementNumber;
-        document.getElementById('edit-assetName').value = asset.name;
-        document.getElementById('edit-modelName').value = asset.modelName || '';
-        document.getElementById('edit-serialNumber').value = asset.serialNumber || '';
-        document.getElementById('edit-assetCategory').value = asset.category;
-        document.getElementById('edit-assetLocation').value = asset.location;
-        document.getElementById('edit-assetValue').value = asset.value || '';
-        document.getElementById('edit-purchaseDate').value = asset.purchaseDate || '';
-        document.getElementById('edit-assetDescription').value = asset.description || '';
-        document.getElementById('edit-modal').style.display = 'flex';
-    }
-
-    // 수정 폼 제출
-    document.getElementById('edit-form').addEventListener('submit', e => {
-        e.preventDefault();
-        const id = document.getElementById('edit-id').value;
-        // 관리번호는 수정 불
-        const updatedData = {
-            name: document.getElementById('edit-assetName').value.trim(),
-            modelName: document.getElementById('edit-modelName').value.trim(),
-            serialNumber: document.getElementById('edit-serialNumber').value.trim(),
-            category: document.getElementById('edit-assetCategory').value,
-            location: document.getElementById('edit-assetLocation').value,
-            value: parseInt(document.getElementById('edit-assetValue').value) || 0,
-            purchaseDate: document.getElementById('edit-purchaseDate').value,
-            description: document.getElementById('edit-assetDescription').value.trim()
-        };
-        assetsRef.child(id).update(updatedData).then(() => {
-            alert('수정 완료');
-            closeEditModal();
-        }).catch(e => alert('수정 실패: ' + e.message));
-    });
-
-    function closeEditModal() {
-        document.getElementById('edit-modal').style.display = 'none';
-    }
-
-    // CSV 내보내기
-    async function exportToCSV() {
-        if(assets.length === 0) {
-            alert('내보낼 자산이 없습니다.');
-            return;
-        }
-        const headers = ['관리번호','자산명','모델명','시리얼넘버','카테고리','위치','가치','구입일','등록일','설명','QR코드(Base64)'];
-        async function getQRCodeDataURL(asset) {
-            const qrData = JSON.stringify({
-                id: asset.id,
-                managementNumber: asset.managementNumber,
-                name: asset.name,
-                modelName: asset.modelName,
-                serialNumber: asset.serialNumber,
-                category: asset.category,
-                location: asset.location
-            });
-            return new Promise(resolve => {
-                const canvas = document.createElement('canvas');
-                QRCode.toCanvas(canvas, qrData, { width: 150, margin: 1 }, error => {
-                    if(error) resolve('');
-                    else resolve(canvas.toDataURL());
-                });
-            });
-        }
-        const csvRows = [];
-        for(const asset of assets) {
-            const qrCodeDataURL = await getQRCodeDataURL(asset);
-            const row = [
-                `"${asset.managementNumber}"`,
-                `"${asset.name.replace(/"/g,'""')}"`,
-                `"${(asset.modelName||'').replace(/"/g,'""')}"`,
-                `"${(asset.serialNumber||'').replace(/"/g,'""')}"`,
-                `"${asset.category}"`,
-                `"${asset.location}"`,
-                asset.value || 0,
-                asset.purchaseDate || '',
-                asset.registrationDate || '',
-                `"${(asset.description||'').replace(/"/g,'""')}"`,
-                `"${qrCodeDataURL}"`
-            ].join(',');
-            csvRows.push(row);
-        }
-        const BOM = '\uFEFF';
-        const csvContent = BOM + [headers.join(','), ...csvRows].join('\n');
-        const blob = new Blob([csvContent], {type:'text/csv;charset=utf-8;'});
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `브라보비버파주_자산목록_${new Date().toISOString().split('T')[0]}.csv`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-    }
-
-    // 목록 인쇄
-    function printAssets() {
-        window.print();
-    }
-
-    // 통계 업데이트
-    function updateStats() {
-        document.getElementById('total-assets').textContent = assets.length;
-        const totalValue = assets.reduce((sum,a) => sum + (a.value||0), 0);
-        document.getElementById('total-value').textContent = totalValue.toLocaleString() + '원';
-        const categories = [...new Set(assets.map(a => a.category))];
-        const locations = ['사무실', '작업장', '그라운드'];
-        document.getElementById('categories-count').textContent = categories.length;
-        document.getElementById('locations-count').textContent = locations.length;
-
-        const categoryStatsEl = document.getElementById('category-stats');
-        categoryStatsEl.innerHTML = `
-            <h3>카테고리별 분포</h3>
-            <div class="asset-grid">
-                ${categories.map(cat => `
-                    <div class="asset-card">
-                        <h4>${cat}</h4>
-                        <p>${assets.filter(a => a.category === cat).length}개</p>
-                    </div>
-                `).join('')}
-            </div>
-        `;
-
-        const locationStatsEl = document.getElementById('location-stats');
-        locationStatsEl.innerHTML = `
-            <h3>위치별 분포</h3>
-            <div class="asset-grid">
-                ${locations.map(loc => `
-                    <div class="asset-card">
-                        <h4>${loc}</h4>
-                        <p>${assets.filter(a => a.location === loc).length}개</p>
-                    </div>
-                `).join('')}
-            </div>
-        `;
-    }
-
-    // 카메라 및 QR 스캔 관련
-    let videoStream = null;
-    const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
-    const context = canvas.getContext('2d');
-    const scanResult = document.getElementById('scan-result');
-
-    async function startCamera() {
-        try {
-            videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-            video.srcObject = videoStream;
-            video.setAttribute('playsinline', true);
-            video.play();
-            requestAnimationFrame(scanQRCode);
-        } catch(err) {
-            alert('카메라 접근 실패: ' + err.message);
-        }
-    }
-
-    function stopCamera() {
-        if(videoStream) {
-            videoStream.getTracks().forEach(track => track.stop());
-            videoStream = null;
-            scanResult.textContent = '';
-        }
-    }
-
-    function scanQRCode() {
-        if(video.readyState === video.HAVE_ENOUGH_DATA) {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            context.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const imageData = context.getImageData(0,0,canvas.width,canvas.height);
-            const code = jsQR(imageData.data, imageData.width, imageData.height, {
-                inversionAttempts: "dontInvert",
-            });
-            if(code) {
-                scanResult.textContent = '스캔 결과: ' + code.data;
-                // 예: 스캔한 데이터에 따라 자산 조회 가능 구현 여지
-            } else {
-                scanResult.textContent = 'QR 코드를 감지하지 못했습니다.';
-            }
-        }
-        if(videoStream) requestAnimationFrame(scanQRCode);
-    }
+    if(videoStream) requestAnimationFrame(scanQRCode);
+}
 </script>
-
-<script>
-    // 페이지 최초 진입 시 탭 초기화
-    document.addEventListener('DOMContentLoaded', () => {
-        showTab('add', document.querySelector('.tab-button.active'));
-    });
-</script>
-
 </body>
 </html>
-
